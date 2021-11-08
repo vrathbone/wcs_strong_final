@@ -1,0 +1,286 @@
+---
+title: "Africa Analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(fasterize)
+library(lwgeom)
+library(broom)
+library(jtools)
+library(dplyr)
+library(kableExtra)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(tmap)
+
+```
+
+Read in Africa and protected areas data   
+```{r}
+
+#map of Africa
+world <- world
+view(world)
+
+summary(world["gdpPercap"]) #summary stats on gdp per cap
+world_africa <- world[world$continent == "Africa",] #only for Africa
+plot(world_africa) #plot all variables for africa
+
+#PAs in africa
+pa_global_sf <- read_sf(here("data", "legal status", "protected", "pa_proj.shp")) %>% 
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents_sf))
+
+names(pa_global_sf)
+
+```
+
+1. Protected areas greater than 500 km^2 in Africa 
+```{r}
+  
+#intersect Africa and the PAs 
+pa_africa <- st_intersection(world_africa, pa_global_sf) %>% 
+  select(name_long, continent, subregion, pop, lifeExp, gdpPercap, name, iucn_cat, status, sq_km, geom) %>% 
+  filter(sq_km>500) %>% 
+  filter(status == "Designated")
+
+
+
+#quick tmaps plot
+tm_shape(world_africa) +
+  tm_polygons("continent") + #map Africa
+  tm_shape(pa_africa) +
+  tm_polygons("status") #map all designated PAs
+
+#plot designated PAs in Africa
+pa_africa_plot <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = pa_africa, aes(fill = status))
+
+pa_africa_plot
+
+#save map as a png file
+ggsave(here("data", "africa", "plots", "pa_africa_plot.png"))
+
+```
+
+2. Protected areas and strongholds
+```{r}
+
+#intersect strongholds and Africa
+strong_africa <- st_intersection(world_africa, strongholds_sf) %>% 
+  select(name_long, continent, subregion, pop, lifeExp, gdpPercap, name, region, wcs_sh, scapename, sq_km, geom)
+
+names(strongholds_sf)
+
+pa_strong_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = strong_africa, aes(fill = continent)) +
+  geom_sf(data = pa_africa, aes(fill = status))
+  
+pa_strong_africa
+
+ggsave(here("data", "africa", "plots", "pa_strong_africa_plot.png"))
+
+```
+
+3. Protected areas and www
+```{r}
+
+#intersect www and Africa
+www_africa <- st_intersection(world_africa, www_sf) %>% 
+  select(name_long, continent, subregion, pop, lifeExp, gdpPercap, scape_name, country, realm, forest, sq_km, geom) %>% 
+  mutate(www = "WCS")
+
+pa_www_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = www_africa, aes(fill = www)) +
+  geom_sf(data = pa_africa, aes(fill = status))
+
+pa_www_africa
+
+ggsave(here("data", "africa", "plots", "pa_www_africa_plot.png"))
+
+```
+
+4. Species Richness
+```{r}
+
+#increase memory size
+memory.size()
+memory.limit(size = 56000)
+
+#read in species richness data
+rich_all <- raster(here("data", "biodiversity", "species richness", "rich_all", "Richness_all.tif"))
+st_crs(rich_all)
+plot(rich_all)
+
+#species richness for strongholds as a dataframe, keeping the geometry
+rich_all_df <- rich_all %>% 
+  as.data.frame(xy= TRUE)
+
+########determine species richness in Africa########
+
+#determine species richness within Africa polygons
+x_africa <- world_africa %>%
+  st_zm() %>% #drop z dimensions
+  filter(subregion != "Northern Africa")
+
+#extract the cells that overlap with species richness and Africa
+y_africa <- raster::extract(rich_all, x_africa) %>% 
+  setNames(x_africa$name_long)
+
+y_africa_test <- raster::extract(rich_all, x_africa)
+
+#create a function to calculate the statistics
+calc_stats <- function(i) {
+  data.frame(mean_rich = mean(i), sd_rich = sd(i), max_rich = max(i), length = length(i))}
+
+#loops each element in the y_africa list and apply calc_stats fun to it
+z_africa <- lapply(y_africa, FUN = calc_stats) %>%
+  setNames(x_africa$name_long) %>% 
+  bind_rows(.id="name_long") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+
+#now map it
+map_rich_africa <- left_join(world_africa, z_africa)
+plot(map_rich_africa %>% select(mean_rich))
+
+rich_all_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = map_rich_africa, aes(fill = mean_rich)) +
+  labs(title = "Mean of Species Richness in Africa")
+
+rich_all_africa
+
+#extract the raster cell count (sum) within each polygon area (strongholds)
+length <- length(world_rast)
+
+for (i in 1:length(world_rast)){
+  ex <- raster::extract(world_rast, world_africa, fun = sum, na.rm=T, df = T)
+  
+}
+
+ggsave(here("data", "africa", "plots", "rich_all_africa.png"))
+
+```
+
+5. Threatened Richness
+```{r}
+
+#read in threatened species richness data
+rich_threat <- raster(here("data", "biodiversity", "species richness", "rich_threat", "Richness_crenvu.tif"))
+st_crs(rich_threat)
+plot(rich_threat)
+
+#threatened species richness for Africa as a dataframe, keeping the geometry
+rich_threat_df <- rich_threat %>% 
+  as.data.frame(xy= TRUE)
+
+########determine species richness in Africa########
+
+#determine threatened species richness within Africa polygons
+#extract
+x_threat_africa <- world_africa %>%
+  st_zm() %>% #drop z dimensions
+  filter(subregion != "Northern Africa")
+
+y_threat_africa <- raster::extract(rich_threat, x_threat_africa) %>% #polygon, here's the number of all of the cells
+  setNames(x_threat_africa$name_long)
+
+#loops each element of the list and apply calc_stats fun to it
+z_threat_africa <- lapply(y_threat_africa, FUN = calc_stats) %>%
+  setNames(x_threat_africa$name_long) %>% 
+  bind_rows(.id="name_long") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+
+#now map it
+rich_threat_africa <- left_join(world_africa, z_threat_africa)
+plot(rich_threat_africa %>% select(mean_rich))
+
+rich_threat_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = rich_threat_africa, aes(fill = mean_rich)) +
+  labs(title = "Mean of Threated Species Richness in Africa")
+
+rich_threat_africa
+
+ggsave(here("data", "africa", "plots", "rich_threat_africa.png"))
+
+```
+
+6. Biodiversity Intactness
+```{r}
+
+
+```
+
+7. PA and primates
+```{r}
+
+#read in primates data
+primates_sf <- read_sf(here("data", "biodiversity", "primates", "primates.shp")) %>% 
+  clean_names()
+
+primates_africa <- st_intersection(world_africa, primates_sf) %>% 
+  select(name_long, binomial, continent, subregion, pop, lifeExp, gdpPercap, presence, tax_comm, geom) %>% 
+  filter(binomial == c("Gorilla beringei", "Gorilla gorilla"))
+
+pa_primates_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = primates_africa, aes(fill = binomial)) +
+  geom_sf(data = pa_africa, aes(fill = status))
+
+pa_primates_africa
+
+ggsave(here("data", "africa", "plots", "pa_primates_africa.png"))
+
+```
+
+8. Cats and Dogs
+```{r}
+
+#############################
+########### CATS ############
+#############################
+
+#read in cats data
+cats_sf <- read_sf(here("data", "biodiversity", "cats and dogs", "cats", "cats.shp")) %>% 
+  clean_names()
+
+names(cats_sf)
+
+
+cats_dups <- cats_sf %>% 
+  get_dupes(geometry)
+
+#[1] "assessment" "id_no"      "binomial"   "presence"   "origin"     "seasonal"   "compiler"  
+# [8] "year"       "citation"   "legend"     "subspecies" "subpop"     "dist_comm"  "island"    
+#[15] "tax_comm"   "geometry" 
+
+cats_africa <- st_intersection(world_africa, cats_sf)
+
+pa_primates_africa <- ggplot() +
+  geom_sf(data = world_africa) +
+  geom_sf(data = primates_africa, aes(fill = binomial)) +
+  geom_sf(data = pa_africa, aes(fill = status))
+
+pa_primates_africa
+
+ggsave(here("data", "africa", "plots", "pa_www_africa_plot.png"))
+
+#############################
+########### DOGS ############
+#############################
+
+
+
+```
+

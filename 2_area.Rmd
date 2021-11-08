@@ -1,0 +1,173 @@
+---
+title: "WCS Strongholds: Area"
+author: "Vanessa Rathbone"
+date: "10/6/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(fasterize)
+library(lwgeom)
+library(broom)
+library(jtools)
+library(dplyr)
+library(kableExtra)
+library(rgdal)
+library(rgeos)
+library(maptools)
+
+```
+
+Area
+```{r}
+
+########## Total Area ###############
+
+#Strongholds
+strong_tot_area <- strongholds %>%
+  select(fid_1, continent, country, region, sq_km)
+# strong_area <- strongholds %>% 
+#   mutate(area = st_area(geometry)/1e+6)  #convert sq meters to sq km
+
+#WWW
+www_area <- www %>% 
+  select(fid_scapes, scape_id, scape_name, continent, sq_km, geometry)
+
+###########
+
+#terrestrial area and % of total terrestrial area, Earth's surface: 510,000,000 km2
+
+strong_area_terr <- strong_tot_area %>% 
+  group_by(continent) %>% 
+  summarise(sum_sq_km = sum(sq_km)) %>% 
+  mutate(sum_total = sum(sum_sq_km)) %>% 
+  mutate(sum_perc = (sum_total/510000000)*100) %>% 
+  mutate(perc_by_cont = (sum_sq_km/510000000)*100)
+
+www_area_terr <- www_area %>% 
+  group_by(continent) %>% 
+  summarise(sum_sq_km = sum(sq_km)) %>% 
+  mutate(sum_total = sum(sum_sq_km)) %>% 
+  mutate(sum_perc = sum_total/510000000)  %>% 
+  mutate(perc_by_cont = (sum_sq_km/510000000)*100)
+
+####make into a table####
+
+#strongholds area
+st_area_table <- strong_area_terr %>%
+  as.data.frame() %>% 
+  select(-geometry) %>% 
+  mutate_if(is.numeric, funs(as.character(signif(.,3))))
+
+colnames(st_area_table) <- c("Continent",
+                          "Sq km by continent",
+                          "Total sq km ",
+                          "Total %",
+                          "% by continent")
+
+st_area_kable <- st_area_table %>%   
+  kable(col.names = c("Continent",
+                          "Sq km by continent",
+                          "Total sq km ",
+                          "Total %",
+                          "% by continent")) %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F,
+                position = "left") %>% 
+  add_header_above(c("Table 1. Total Terrestrial Stronghold Areas" = 5)) %>% 
+  row_spec(c(1:5),
+           bold = T, 
+           color = "grey")
+
+st_area_kable
+
+#www area table
+www_area_table <- www_area_terr %>%
+  as.data.frame() %>% 
+  select(-geometry) %>% 
+  mutate_if(is.numeric, funs(as.character(signif(.,3))))
+
+colnames(www_area_table) <- c("Continent",
+                          "Sq km by continent",
+                          "Total sq km ",
+                          "Total %",
+                          "% by continent")
+
+www_area_kable <- www_area_table %>%   
+  kable(col.names = c("Continent",
+                      "Sq km by continent",
+                      "Total sq km ",
+                      "Total %",
+                      "% by continent")) %>%
+  kable_styling(bootstrap_options = "striped",
+                full_width = F,
+                position = "left") %>% 
+  add_header_above(c("Table 1. Total Terrestrial Where We Work Areas" = 5)) %>% 
+  row_spec(c(1:5),
+           bold = T, 
+           color = "grey")
+
+www_area_kable
+
+```
+Marine Areas
+```{r}
+########## Marine Areas ##########
+
+#%of total marine area
+
+```
+
+Legal Status
+```{r}
+
+pa_global_sf <- read_sf(here("data", "legal status", "protected", "WDPA_Oct2021_Public_shp-polygons.shp")) %>%
+  select(-geometry) %>% 
+  st_zm()
+
+st_crs(pa_global_sf)
+
+#sf_use_s2(FALSE)
+
+#rasterize protected areas
+pa_rast <- raster::raster(extent(pa_global_sf))
+values(pa_rast) <- 1:ncell(pa_rast)
+pa_rast <-mask(pa_rast, pa_global_sf)
+
+#plot(pa_rast)
+
+#total number of PA and % of PA in where we work areas
+#run the intersect function, converting the output to a tibble in the process
+pa_int <- as_tibble(st_intersection(pa_global_sf, www_sf))
+
+#add in an area count column to the tibble (area of each pa polygon in intersect layer)
+pa_int$area_PA <- st_area(pa_int$geometry)
+
+#plot the layers to visually check result of intersect
+plot(pa_global_sf$geometry, col='green')
+plot(www_sf$geometry, add=T)
+plot(pa_int$geometry, col='red', add=T)
+
+#group data by sq_km and calculate the total protected area per www area
+#output as new tibble
+tb_PAbyWWW <- pa_int %>%
+  group_by(WDPAID) %>% #group_by as ID
+  summarise(area_PA = sum(area_PA)) #sum by sq_km
+
+#change data type of area_PA field to numeric (from 'S3: units' with km^2 suffix)
+tb_PAbyWWW$area_PA <- as.numeric(tb_PAbyWWW$area_PA)
+
+#join tibble to original www polygon shapefile and export as new shapefile
+pa_out <- st_write(merge(www_sf, tb_PAbyWWW, by = 'WDPAID'), "PA_by_WWW.shp")
+
+
+
+```
+

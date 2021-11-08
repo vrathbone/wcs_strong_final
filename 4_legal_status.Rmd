@@ -1,0 +1,65 @@
+---
+title: "3_legal_status"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(fasterize)
+library(lwgeom)
+
+
+```
+
+Legal Status - Protected Areas
+```{r}
+
+pa_global_sf <- read_sf(here("data", "legal status", "protected", "pa_proj.shp")) %>% 
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents_sf))
+
+st_crs(pa_global_sf)
+
+sf_use_s2(FALSE)
+
+#rasterize protected areas
+pa_rast <- raster::raster(extent(pa_global_sf), res = .1)
+values(pa_rast) <- 1:ncell(pa_rast)
+pa_rast <-mask(pa_rast, continents)
+
+plot(pa_rast)
+
+#total number and % of www areas
+#run the intersection function, converting the output to a tibble in the process
+pa_int <- as_tibble(st_intersection(pa_global_sf, www_sf))
+
+#add in an area count column to the tibble (area of each pa polygon in intersect layer)
+pa_int$area_PA <- st_area(pa_int$geometry)
+
+#plot the layers to visually check result of intersect
+plot(pa_global_sf$geometry, col='green')
+plot(www_sf$geometry, add=T)
+plot(pa_int$geometry, col='red', add=T)
+
+#group data by sq_km and calculate the total protected area per www area
+#output as new tibble
+tb_PAbyWWW <- pa_int %>%
+  group_by(sq_km) %>%
+  summarise(area_PA = sum(area_PA))
+
+#change data type of area_PA field to numeric (from 'S3: units' with km^2 suffix)
+tb_PAbyWWW$area_PA <- as.numeric(tb_PAbyWWW$area_PA)
+
+
+#join tibble to original www polygon shapefile and export as new shapefile
+shp_out <- st_write(merge(www_sf, tb_PAbyWWW, by = 'sq_km'), "PA_by_WWW.shp")
+
+
+
+```

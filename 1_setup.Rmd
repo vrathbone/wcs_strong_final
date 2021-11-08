@@ -1,0 +1,171 @@
+---
+title: "Set up files"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(fasterize)
+library(lwgeom)
+library(broom)
+library(jtools)
+library(dplyr)
+library(kableExtra)
+library(rgdal)
+library(rgeos)
+library(maptools)
+library(spData)
+
+```
+
+Set up continent, strongholds and where we work files as simple feature files and rasters for analysis.
+
+Data as simple features
+```{r}
+
+#read in the data from file paths
+
+continents_path <- 'H:/WCS_Strongholds/area/continents'
+continents_shape <- list.files(continents_path, full.names = TRUE)
+
+strongholds_path <- 'H:/WCS_Strongholds/area/strongholds'
+strongholds_shape <- list.files(strongholds_path, full.names = TRUE)
+
+www_path <- 'H:/WCS_Strongholds/area/www'
+www_shape <- list.files(www_path, full.names = TRUE)
+
+#read in files as simple feature files
+
+#####world#####
+world <- world
+
+data(world)
+names(world) #columns in the database
+st_crs(world) #check crs
+summary(world["gdpPercap"]) #summary stats on gdp per cap
+world_africa <- world[world$continent == "Africa",] #only for Africa
+plot(world_africa) #plot all variables for africa
+
+#####continents#####
+continents_sf <- sf::read_sf(continents_shape[6])%>% 
+  clean_names()
+
+st_crs(continents_sf)
+
+#plot(continents_sf)
+
+#####strongholds#####
+strongholds_sf <- sf::read_sf(strongholds_shape[6]) %>%
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents_sf))
+
+st_crs(strongholds_sf)
+
+# plot(strongholds_sf)
+
+#####where we work#####
+www_sf <- sf::read_sf(www_shape[6]) %>% 
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents_sf)) #change to correct crs
+
+st_crs(www_sf)
+
+# plot(www_sf)
+```
+
+Data as rasters
+```{r}
+
+##### worlds raster #####
+
+world_rast <- raster::raster(extent(world), res = .1)
+values(world_rast) <- 1:ncell(world_rast)
+world_rast <- mask(world_rast, world)
+
+world_rast
+
+#plot(world_rast)
+
+##### continents raster #####
+
+continents <- sf::read_sf(continents_shape[6]) %>%
+  clean_names()
+
+st_crs(continents)
+
+continents_rast <- raster::raster(extent(continents), res = .1)
+values(continents_rast) <- 1:ncell(continents_rast)
+continents_rast <- mask(continents_rast, continents)
+
+continents_rast
+
+#plot(continents_rast)
+ 
+##### strongholds raster #####
+strongholds <- sf::read_sf(strongholds_shape[6]) %>%
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents)) %>% 
+  select(-geometry) %>% 
+  st_zm()
+
+st_crs(strongholds)
+
+strong_rast <- raster::raster(extent(strongholds), res = .1) #convert to raster
+values(strong_rast) <- 1:ncell(strong_rast) #add cell values
+strong_rast <-mask(strong_rast, strongholds) #mask to continents
+
+#plot(strong_rast)
+
+##### where we work raster #####
+www <- sf::read_sf(www_shape[6]) %>% 
+  clean_names() %>% 
+  st_transform(., crs = st_crs(continents)) %>%  #change to correct crs
+  st_zm()
+
+st_crs(www)
+
+www_rast <- raster::raster(extent(www), res = .1)
+values(www_rast) <- 1:ncell(www_rast)
+www_rast <-mask(www_rast, www)
+
+#plot(www_rast)
+
+www_df <- www_rast %>% #create df
+  as.data.frame()
+
+
+```
+
+```{r}
+
+
+#convert to rasters with cell ids
+# #use continents to set the extent for future rasters
+# continents_ext <- raster::extent(continents_sf)
+# 
+# #create raster with cell ids
+# continents_rast_id <- raster(x = continents_ext, crs = crs(continents_sf), res = 100)
+# 
+# #assign cell values
+# values(continents_rast_id) <- 1:ncell(continents_rast_id)
+# 
+# #create data frame to check it out
+# continents_rast_df <- rasterToPoints(continents_rast_id) %>% 
+#   as.data.frame()
+# 
+# #mask it to show continents
+# continents_rast_id <- mask(continents_rast_id, continents_sf)
+# 
+# plot(continents_rast_id)
+
+
+
+# sf::sf_use_s2(FALSE)
+```
+

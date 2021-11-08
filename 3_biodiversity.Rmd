@@ -1,0 +1,243 @@
+---
+title: "WCS Strongholds: Biodiversity"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(raster)
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(fasterize)
+library(lwgeom)
+library(stringr)
+library(janitor)
+
+```
+
+Biodiversity - Species Richness
+```{r}
+
+#read in all species richness data all and threatened rasters
+rich_all <- raster(here("data", "biodiversity", "species richness", "rich_all", "Richness_all.tif"))
+st_crs(rich_all)
+plot(rich_all)
+
+#species richness for strongholds as a dataframe, keeping the geometry
+rich_all_df <- rich_all %>% 
+  as.data.frame(xy= TRUE)
+
+########determine species richness in strongholds########
+
+#determine species richness within stronghold polygons
+#extract
+x <- strongholds_sf %>%
+  st_zm() #drop z dimensions
+
+y <- raster::extract(rich_all, x) %>% #polygon, here's the number of all of the cells
+  setNames(x$scape_name)
+
+#create a function to calculate the statistics
+calc_stats <- function(i) {
+  data.frame(mean_rich = mean(i), sd_rich = sd(i), max_rich = max(i), length = length(i))}
+
+#write a loop to index over each of the rows in y. do the calc stats function
+# z <- vector('list', length = length(y))
+# for(j in 1:length(y)) {z[[j]] <- calc_stats(y[[j]])}
+
+# #loops each element of the list and apply calc_stats fun to it
+z <- lapply(y, FUN = calc_stats) %>%
+  setNames(x$scape_name) %>% 
+  bind_rows(.id="scape_name") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+
+#now map it
+map_sf_rich <- left_join(strongholds_sf, z)
+plot(map_sf_rich %>% select(mean_rich))
+
+#extract the raster cell count (sum) within each polygon area (strongholds)
+length <- length(strong_rast)
+
+s <- stack(paste0(""))
+
+for (i in 1:length(strong_rast)){
+  ex <- raster::extract(strong_rast, strongholds_sf, fun = sum, na.rm=T, df = T)
+  
+}
+
+
+########determine threatened species richness in strongholds########
+
+#read in threatened richness data
+rich_threat <- raster(here("data", "biodiversity", "species richness", "rich_threat", "Richness_crenvu.tif"))
+st_crs(rich_threat)
+plot(rich_threat)
+
+#as a df, keep geometry
+rich_threat_df <- rich_threat %>% 
+  as.data.frame(xy= TRUE)
+
+#determine species richness within stronghold polygons
+#extract
+x <- strongholds_sf %>%
+  st_zm() #drop z dimensions
+
+y_threat <- raster::extract(rich_threat, x) %>% #polygon, here's the number of all of the cells
+  setNames(x$scape_name)
+
+#create a function to calculate the statistics
+calc_stats <- function(i) {
+  data.frame(mean_rich = mean(i), sd_rich = sd(i), max_rich = max(i), length = length(i))}
+
+# #loops each element of the list and apply calc_stats fun to it
+z_threat <- lapply(y_threat, FUN = calc_stats) %>%
+  setNames(x$scape_name) %>% 
+  bind_rows(.id="scape_name") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+
+#now map it
+map_sf_rich_threat <- left_join(strongholds_sf, z_threat)
+plot(map_sf_rich_threat %>% select(mean_rich))
+
+#extract the raster cell count (sum) within each polygon area (strongholds)
+length <- length(strong_rast)
+
+s <- stack(paste0(""))
+
+for (i in 1:length(strong_rast)){
+  ex_threat <- raster::extract(strong_rast, strongholds_sf, fun = sum, na.rm=T, df = T)
+  
+}
+
+# #extract 
+# x <- strongholds_sf %>% 
+#   head(10) %>% 
+#   st_zm()
+# 
+# #determine species richness within stronghold polygons
+# y <- raster::extract(rich_all, x) %>% #polygon, here's the number of all of the cells
+#   setNames(x$scapename)
+# 
+# #create a function to calculate the statistics
+# calc_stats <- function(i) {
+#   data.frame(mean_rich = mean(i), sd_rich = sd(i), max_rich = max(i), length = length(i))}
+# 
+# #write a loop to index over each of the rows in y. do the calc stats function
+# 
+# # z <- vector('list', length = length(y))
+# # for(j in 1:length(y)) {z[[j]] <- calc_stats(y[[j]])}
+# 
+# # #loops each element of the list and apply calc_stats fun to it
+# z <- lapply(y, FUN = calc_stats) %>%
+#   setNames(x$scapename) %>% 
+#   bind_rows(.id="scapename") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+# 
+# #now map it
+# map_sf_rich <- left_join(strongholds_sf, z)
+# plot(map_sf_rich %>% select(mean_rich))
+# 
+# #extract the raster cell count (sum) within each polygon area (strongholds)
+# length <- length(strong_rast)
+# 
+# s <- stack(paste0(""))
+# 
+# for (i in 1:length(strong_rast)){
+#   ex <- extract(strong_rast, strongholds, fun = sum, na.rm=T, df = T)
+#   
+# }
+
+```
+
+
+Amphibian raster test
+```{r}
+#read in IUCN data
+#test with amphibians
+amphibians_sf <- read_sf(here("data", "biodiversity", "species richness", "amphibians", "AMPHIBIANS.shp"))
+
+st_crs(amphibians_sf)
+
+amphibians_df <- amphibians_sf %>% 
+  as.data.frame() %>% 
+  select(-geometry)
+
+#create a raster for each species using a function
+create_rast <- function(amphibian_sf, species_name){
+  outfile <- sprintf(here('data/final_rasters/iucn_species/species_%s.tif'), species_name)
+  message('Processing species ', species_name, ' to create file ', outfile)
+
+  amphibians_df <- amphibians_sf %>%
+  filter(binomial == species_name)
+
+amphibian_rast <- fasterize::fasterize(amphibian_df, strong_rast) %>% 
+  mask(mz_eez_sf)
+
+writeRaster(amphibian_rast, filename = outfile, overwrite = TRUE)
+
+return('yay it works')
+
+}
+
+
+#number of Threatened Species
+
+#IUCN Red List Species Category by animal category by # and by % of global total
+
+#Marine species represented
+
+```
+
+
+Cats and Dogs
+```{r}
+
+########Cats in www and strongholds########
+
+#read in all cat data rasters
+cats_sf <- read_sf(here("data", "biodiversity", "cats and dogs", "cats", "cats.shp")) %>% 
+  select(-geometry)
+
+st_crs(cats_sf)
+
+sf_use_s2(FALSE)
+
+#rasterize cats data
+cats_rast <- raster(extent(cats_sf))
+values(cats_rast) <- 1:ncell(cats_rast)
+cats_rast <-mask(cats_rast, continents)
+
+plot(cats_rast)
+
+#total number and % of www
+#run the intersect function, converting the output to a tibble in the process
+cats_int <- as_tibble(st_intersection(cats_sf, www_sf))
+
+#add in an area count column to the tibble (area of each pa polygon in intersect layer)
+cats_int$area_Cats <- st_area(cats_int$geometry)
+
+#plot the layers to visually check result of intersect
+plot(cats_sf$geometry, col='green')
+plot(www_sf$geometry, add=T)
+plot(cats_int$geometry, col='red', add=T)
+
+#group data by sq_km and calculate the total protected area per www area
+#output as new tibble
+tb_PAbyWWW <- pa_int %>%
+  group_by(WDPAID) %>% #group_by as ID
+  summarise(area_PA = sum(area_PA)) #sum by sq_km
+
+#change data type of area_PA field to numeric (from 'S3: units' with km^2 suffix)
+tb_PAbyWWW$area_PA <- as.numeric(tb_PAbyWWW$area_PA)
+
+#join tibble to original www polygon shapefile and export as new shapefile
+pa_out <- st_write(merge(www_sf, tb_PAbyWWW, by = 'WDPAID'), "PA_by_WWW.shp")
+
+
+# total number of species
+# total number of threatened species
+# total number of threatened species distribution
+# total number of threatened species population
+```
+
