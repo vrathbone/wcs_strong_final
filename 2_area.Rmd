@@ -32,7 +32,7 @@ Area
 
 #Strongholds
 strong_tot_area <- strongholds %>%
-  select(fid_1, continent, country, region, sq_km)
+  select(objectid, scapename, country, region, sq_km)
 # strong_area <- strongholds %>% 
 #   mutate(area = st_area(geometry)/1e+6)  #convert sq meters to sq km
 

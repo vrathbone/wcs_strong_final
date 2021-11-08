@@ -31,13 +31,13 @@ Data as simple features
 
 #read in the data from file paths
 
-continents_path <- 'H:/WCS_Strongholds/area/continents'
+continents_path <- 'H:/WCS_Strongholds/data/area/continents'
 continents_shape <- list.files(continents_path, full.names = TRUE)
 
-strongholds_path <- 'H:/WCS_Strongholds/area/strongholds'
+strongholds_path <- 'H:/WCS_Strongholds/data/area/strongholds/strong_v3'
 strongholds_shape <- list.files(strongholds_path, full.names = TRUE)
 
-www_path <- 'H:/WCS_Strongholds/area/www'
+www_path <- 'H:/WCS_Strongholds/data/area/www'
 www_shape <- list.files(www_path, full.names = TRUE)
 
 #read in files as simple feature files
