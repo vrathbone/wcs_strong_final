@@ -22,8 +22,11 @@ library(janitor)
 Biodiversity - Species Richness
 ```{r}
 
+rich_path <- 'H:/WCS_Strongholds/data/biodiversity/species_richness/rich_all'
+rich_tif <- list.files(rich_path, full.names = TRUE)
+
 #read in all species richness data all and threatened rasters
-rich_all <- raster(here("data", "biodiversity", "species richness", "rich_all", "Richness_all.tif"))
+rich_all <- raster(rich_tif[2])
 st_crs(rich_all)
 plot(rich_all)
 
@@ -39,7 +42,7 @@ x <- strongholds_sf %>%
   st_zm() #drop z dimensions
 
 y <- raster::extract(rich_all, x) %>% #polygon, here's the number of all of the cells
-  setNames(x$scape_name)
+  setNames(x$scapename)
 
 #create a function to calculate the statistics
 calc_stats <- function(i) {
@@ -51,8 +54,8 @@ calc_stats <- function(i) {
 
 # #loops each element of the list and apply calc_stats fun to it
 z <- lapply(y, FUN = calc_stats) %>%
-  setNames(x$scape_name) %>% 
-  bind_rows(.id="scape_name") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
+  setNames(x$scapename) %>% 
+  bind_rows(.id="scapename") #names that we assigned to objects of z, bind all of the dataframes together, new column based on the id based on the list elements
 
 #now map it
 map_sf_rich <- left_join(strongholds_sf, z)
@@ -71,8 +74,12 @@ for (i in 1:length(strong_rast)){
 
 ########determine threatened species richness in strongholds########
 
+
+rich_threat_path <- 'H:/WCS_Strongholds/data/biodiversity/species_richness/rich_threat'
+rich_threat_tif <- list.files(rich_threat_path, full.names = TRUE)
+
 #read in threatened richness data
-rich_threat <- raster(here("data", "biodiversity", "species richness", "rich_threat", "Richness_crenvu.tif"))
+rich_threat <- raster(rich_tif[2])
 st_crs(rich_threat)
 plot(rich_threat)
 
