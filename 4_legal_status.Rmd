@@ -20,7 +20,10 @@ library(lwgeom)
 Legal Status - Protected Areas
 ```{r}
 
-pa_global_sf <- read_sf(here("data", "legal status", "protected", "pa_proj.shp")) %>% 
+pa_path <- 'H:/WCS_Strongholds/data/legal_status/protected'
+pa_shape <- list.files(pa_path, full.names = TRUE)
+
+pa_global_sf <- sf::read_sf(pa_shape[14]) %>% 
   clean_names() %>% 
   st_transform(., crs = st_crs(continents_sf))
 
